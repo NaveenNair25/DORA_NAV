@@ -1,0 +1,29 @@
+nodes:
+  # Keyboard input node (optional - for testing)
+  - id: keyboard
+    custom:
+      source: ../adora_chassis_control_dora_node/get_keyboard_value2.py
+      inputs:
+        tick:
+          source: dora/timer/millis/100
+      outputs:
+        - CmdVelTwist
+
+  # Ranger Mini V3 control node
+  - id: ranger_miniv3_node
+    custom:
+      source: build/ranger_miniv3_node
+      inputs:
+        CmdVelTwist:
+          source: keyboard/CmdVelTwist
+        tick:
+          source: dora/timer/millis/10  # 100 Hz = 10ms period
+      outputs:
+        - Odometry
+        - SystemState
+        - MotionState
+        - ActuatorState
+        - BatteryState
+      envs:
+        CAN_PORT: can0
+        UPDATE_RATE: 100
