@@ -4,17 +4,17 @@ Ranger Mini V3 DORA节点实现，基于Ranger Mini V3 ROS2节点代码修改，
 
 ## 1 功能特性
 
-- ✅ 支持Ranger Mini V3机器人
-- ✅ 通过CAN总线与ugv_sdk通信
-- ✅ 支持4种运动模式：
+-  支持Ranger Mini V3机器人
+-  通过CAN总线与ugv_sdk通信
+-  支持4种运动模式：
   - 双阿克曼转向 (Dual Ackerman)
   - 平行模式 (Parallel/Omnidirectional)
   - 原地旋转 (Spinning)
   - 侧滑模式 (Side Slip - 仅V1支持)
-- ✅ 实时里程计计算
-- ✅ 完整的状态反馈（系统状态、执行器状态、电池状态）
-- ✅ JSON格式数据传输
-- ✅ 100Hz高频率更新
+-  实时里程计计算
+-  完整的状态反馈（系统状态、执行器状态、电池状态）
+-  JSON格式数据传输
+-  100Hz高频率更新
 
 ### 1.1 输入输出接口
 
@@ -46,7 +46,7 @@ Ranger Mini V3 DORA节点实现，基于Ranger Mini V3 ROS2节点代码修改，
 - CAN总线接口（can0或can1）
 - 已配置的CAN驱动
 
-##  2 节点启动 🚀
+##  2 节点启动 
 
 ### 2.1 步骤1: 检查依赖
 
@@ -116,7 +116,7 @@ dora logs ranger_miniv3_node
 
 - `CAN_PORT`: CAN接口名称（默认: can0）
 - `UPDATE_RATE`: 状态更新频率（默认: 100 Hz）
- 
+
 
 ## 3 运动模式说明
 
@@ -159,29 +159,114 @@ Failed to connect to CAN port: can0
 
 ### 4.2 权限问题
 ```
-Permission denied
+CAN bus Permission denied
 ```
 解决方案：
 ```bash
-# 添加用户到dialout组
+ 添加用户到dialout组
 sudo usermod -a -G dialout $USER
 
-# 或使用sudo运行
+ 或使用sudo运行
 sudo dora start ranger_miniv3_dataflow.yml
 ```
 
-### 4.3 编译错误
-- 确保已下载ugv_sdk ranger_dora_node中
-- 确保已安装DORA runtime
-- 检查CMakeLists.txt中的路径设置
 
-### 4.4 与ROS2节点的对比
 
-| 特性 | ROS2节点 | DORA节点 |
-|------|---------|---------|
-| 通信框架 | ROS2 DDS | DORA |
-| 数据格式 | ROS2消息 | JSON |
-| 配置方式 | launch文件 | dataflow.yml |
-| 依赖 | ROS2 | DORA runtime |
-| 性能 | 中等 | 高（更低延迟） |
- 
+## 5   通讯格式说明
+
+### 5.1 Odometry（publish）
+
+```
+    j["header"]["frame_id"] = msg.header.frame_id;
+    j["header"]["seq"] = msg.header.seq;
+    j["header"]["stamp"]["sec"] = msg.header.stamp.sec;
+    j["header"]["stamp"]["nanosec"] = msg.header.stamp.nanosec;
+
+    j["child_frame_id"] = msg.child_frame_id;
+
+    j["pose"]["pose"]["position"]["x"] = msg.pose.pose.position.x;
+    j["pose"]["pose"]["position"]["y"] = msg.pose.pose.position.y;
+    j["pose"]["pose"]["position"]["z"] = msg.pose.pose.position.z;
+
+    j["pose"]["pose"]["orientation"]["x"] = msg.pose.pose.orientation.x;
+    j["pose"]["pose"]["orientation"]["y"] = msg.pose.pose.orientation.y;
+    j["pose"]["pose"]["orientation"]["z"] = msg.pose.pose.orientation.z;
+    j["pose"]["pose"]["orientation"]["w"] = msg.pose.pose.orientation.w;
+
+    j["twist"]["twist"]["linear"]["x"] = msg.twist.twist.linear.x;
+    j["twist"]["twist"]["linear"]["y"] = msg.twist.twist.linear.y;
+    j["twist"]["twist"]["linear"]["z"] = msg.twist.twist.linear.z;
+
+    j["twist"]["twist"]["angular"]["x"] = msg.twist.twist.angular.x;
+    j["twist"]["twist"]["angular"]["y"] = msg.twist.twist.angular.y;
+    j["twist"]["twist"]["angular"]["z"] = msg.twist.twist.angular.z;
+```
+
+
+
+### 5.2 SystemState（publish）
+
+```
+    j["header"]["stamp"]["sec"] = msg.header.stamp.sec;
+    j["header"]["stamp"]["nanosec"] = msg.header.stamp.nanosec;
+
+    j["vehicle_state"] = msg.vehicle_state;
+    j["control_mode"] = msg.control_mode;
+    j["error_code"] = msg.error_code;
+    j["battery_voltage"] = msg.battery_voltage;
+    j["motion_mode"] = msg.motion_mode;
+```
+
+
+
+### 5.3 MotionState（publish）
+
+```
+    json j;
+    j["header"]["stamp"]["sec"] = msg.header.stamp.sec;
+    j["header"]["stamp"]["nanosec"] = msg.header.stamp.nanosec;
+    j["motion_mode"] = msg.motion_mode;
+```
+
+
+
+### 5.4 ActuatorState（publish）
+
+```
+    j["header"]["stamp"]["sec"] = msg.header.stamp.sec;
+    j["header"]["stamp"]["nanosec"] = msg.header.stamp.nanosec;
+
+    json states = json::array();
+    for (const auto &actuator : msg.states)
+    {
+      json act;
+      act["id"] = actuator.id;
+
+      act["driver"]["driver_voltage"] = actuator.driver.driver_voltage;
+      act["driver"]["driver_temperature"] = actuator.driver.driver_temperature;
+      act["driver"]["motor_temperature"] = actuator.driver.motor_temperature;
+      act["driver"]["driver_state"] = actuator.driver.driver_state;
+
+      act["motor"]["current"] = actuator.motor.current;
+      act["motor"]["pulse_count"] = actuator.motor.pulse_count;
+      act["motor"]["rpm"] = actuator.motor.rpm;
+      act["motor"]["motor_angle"] = actuator.motor.motor_angles;
+      act["motor"]["motor_speed"] = actuator.motor.motor_speeds;
+      states.push_back(act);
+    }
+
+    j["states"] = states;
+```
+
+### 5.5 BatteryState（publish）
+
+```
+    j["header"]["stamp"]["sec"] = msg.header.stamp.sec;
+    j["header"]["stamp"]["nanosec"] = msg.header.stamp.nanosec;
+
+    j["voltage"] = msg.voltage;
+    j["temperature"] = msg.temperature;
+    j["current"] = msg.current;
+    j["percentage"] = msg.percentage;
+```
+

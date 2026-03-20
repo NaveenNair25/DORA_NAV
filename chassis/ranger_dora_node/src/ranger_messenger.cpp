@@ -9,6 +9,7 @@
 
 #include "ranger_base/ranger_messenger.hpp"
 
+#include "ranger_base/kinematics_model.hpp"
 // DORA includes
 extern "C"
 {
@@ -322,49 +323,62 @@ namespace westonrobot
     // Update odometry calculations
     if (motion_mode_ == ranger_msgs::MotionState::MOTION_MODE_DUAL_ACKERMAN)
     {
-      float delta_theta = angular * dt;
-      float delta_x = linear * std::cos(theta_ + delta_theta / 2.0) * dt;
-      float delta_y = linear * std::sin(theta_ + delta_theta / 2.0) * dt;
+      // float delta_theta = angular * dt;
+      // float delta_x = linear * std::cos(theta_ + delta_theta / 2.0) * dt;
+      // float delta_y = linear * std::sin(theta_ + delta_theta / 2.0) * dt;
 
-      position_x_ += delta_x;
-      position_y_ += delta_y;
-      theta_ += delta_theta;
+      // position_x_ += delta_x;
+      // position_y_ += delta_y;
+      // theta_ += delta_theta;
       // 原版代码
-      // DualAckermanModel::state_type x = {position_x_, position_y_, theta_};
-      // DualAckermanModel::control_type u;
-      // u.v = linear;
-      // u.phi = ConvertInnerAngleToCentral(angle);
+      DualAckermanModel::state_type x = {(double)position_x_, (double)position_y_, (double)theta_};
+      DualAckermanModel::control_type u;
+      u.v = (double)linear;
+      u.phi = ConvertInnerAngleToCentral((double)angle);
 
-      // boost::numeric::odeint::integrate_const(
-      //     boost::numeric::odeint::runge_kutta4<DualAckermanModel::state_type>(),
-      //     DualAckermanModel(robot_params_.wheelbase, u), x, 0.0, dt, (dt / 10.0));
-      // // std::cout<<" steer: "<<angle<<" central: "<<u.phi<<std::endl;
-      // position_x_ = x[0];
-      // position_y_ = x[1];
-      // theta_ = x[2];
+      boost::numeric::odeint::integrate_const(
+          boost::numeric::odeint::runge_kutta4<DualAckermanModel::state_type>(),
+          DualAckermanModel((double)robot_params_.wheelbase, u), x, 0.0, (double)dt, (dt / 10.0));
+      // std::cout<<" steer: "<<angle<<" central: "<<u.phi<<std::endl;
+      position_x_ = x[0];
+      position_y_ = x[1];
+      theta_ = x[2];
     }
     else if (motion_mode_ == ranger_msgs::MotionState::MOTION_MODE_PARALLEL ||
              motion_mode_ == ranger_msgs::MotionState::MOTION_MODE_SIDE_SLIP)
     {
-      float phi = angle;
+      ParallelModel::state_type x = {(double)position_x_, (double)position_y_, (double)theta_};
+      ParallelModel::control_type u;
+      u.v = (double)linear;
       if (motion_mode_ == ranger_msgs::MotionState::MOTION_MODE_SIDE_SLIP)
       {
-        phi = M_PI / 2.0;
+        u.phi = M_PI / 2.0;
       }
+      else
+      {
+        u.phi = (double)angle;
+      }
+      boost::numeric::odeint::integrate_const(
+          boost::numeric::odeint::runge_kutta4<ParallelModel::state_type>(),
+          ParallelModel(u), x, 0.0, (double)dt, ((double)dt / 10.0));
 
-      float delta_x = (linear * std::cos(theta_) * std::cos(phi) -
-                       linear * std::sin(theta_) * std::sin(phi)) *
-                      dt;
-      float delta_y = (linear * std::sin(theta_) * std::cos(phi) +
-                       linear * std::cos(theta_) * std::sin(phi)) *
-                      dt;
-
-      position_x_ += delta_x;
-      position_y_ += delta_y;
+      position_x_ = x[0];
+      position_y_ = x[1];
+      theta_ = x[2];
     }
     else if (motion_mode_ == ranger_msgs::MotionState::MOTION_MODE_SPINNING)
     {
-      theta_ += angular * dt;
+      SpinningModel::state_type x = {(double)position_x_, (double)position_y_, (double)theta_};
+      SpinningModel::control_type u;
+      u.w = (double)angular;
+
+      boost::numeric::odeint::integrate_const(
+          boost::numeric::odeint::runge_kutta4<SpinningModel::state_type>(),
+          SpinningModel(u), x, 0.0, (double)dt, ((double)dt / 10.0));
+
+      position_x_ = x[0];
+      position_y_ = x[1];
+      theta_ = x[2];
     }
 
     // Normalize theta to [-pi, pi]
@@ -406,11 +420,13 @@ namespace westonrobot
       // Use minimum turn radius to switch between dual ackerman and spinning mode
       if (radius < robot_params_.min_turn_radius)
       {
+        // cout << " spinning mode radius: " << radius << "   x: " << msg.linear.x << "   z: " << msg.angular.z << std::endl;
         motion_mode_ = ranger_msgs::MotionState::MOTION_MODE_SPINNING;
         robot_->SetMotionMode(ranger_msgs::MotionState::MOTION_MODE_SPINNING);
       }
       else
       {
+        // cout << " dual ackerman mode radius: " << radius << "   x: " << msg.linear.x << "   z: " << msg.angular.z << std::endl;
         motion_mode_ = ranger_msgs::MotionState::MOTION_MODE_DUAL_ACKERMAN;
         robot_->SetMotionMode(ranger_msgs::MotionState::MOTION_MODE_DUAL_ACKERMAN);
       }
@@ -483,7 +499,7 @@ namespace westonrobot
     }
     case ranger_msgs::MotionState::MOTION_MODE_SPINNING:
     {
-      double a_v = msg.linear.z;
+      double a_v = msg.angular.z;
       if (a_v > robot_params_.max_angular_speed)
       {
         a_v = robot_params_.max_angular_speed;
@@ -511,31 +527,58 @@ namespace westonrobot
     }
     }
   }
+
   float RangerDoraMessenger::CalculateSteeringAngle(const ranger_msgs::Twist &msg,
                                                     float &radius)
   {
-    if (std::abs(msg.angular.z) > 0.001 && std::abs(msg.linear.x) > 0.001)
+    double linear = std::abs(msg.linear.x);
+    double angular = std::abs(msg.angular.z);
+
+    if (angular < 1e-6)
     {
-      radius = std::abs(msg.linear.x / msg.angular.z);
-      return std::atan(robot_params_.wheelbase * msg.angular.z / msg.linear.x);
-    }
-    else
-    {
-      radius = 1000.0; // Large radius for straight line
+      radius = std::numeric_limits<double>::infinity();
       return 0.0;
     }
+    // Circular motion
+    radius = linear / angular;
+    int k = (msg.angular.z * msg.linear.x) >= 0 ? 1 : -1;
+
+    double l, w, phi_i, x;
+    l = robot_params_.wheelbase;
+    w = robot_params_.track;
+    x = sqrt(radius * radius + (l / 2) * (l / 2));
+    // phi_i = atan((l / 2) / (x - w / 2));
+    phi_i = atan((l / 2) / radius);
+
+    const double max_phi_rad = 40.0 * M_PI / 180.0;
+    phi_i = std::min(phi_i, max_phi_rad);
+
+    return k * phi_i;
   }
 
   float RangerDoraMessenger::ConvertInnerAngleToCentral(float angle)
   {
-    float r = robot_params_.wheelbase / std::tan(angle) + robot_params_.track / 2.0;
-    return std::atan(robot_params_.wheelbase / r);
+    double phi = 0;
+    double phi_i = std::abs(angle);
+
+    phi = std::atan(robot_params_.wheelbase * std::sin(phi_i) /
+                    (robot_params_.wheelbase * std::cos(phi_i) +
+                     robot_params_.track * std::sin(phi_i)));
+
+    phi *= angle >= 0 ? 1.0 : -1.0;
+    return phi;
   }
 
   float RangerDoraMessenger::ConvertCentralAngleToInner(float angle)
   {
-    float r = robot_params_.wheelbase / std::tan(angle);
-    return std::atan(robot_params_.wheelbase / (r - robot_params_.track / 2.0));
+    double phi = std::abs(angle);
+    double phi_i = 0;
+
+    phi_i = std::atan(robot_params_.wheelbase * std::sin(phi) /
+                      (robot_params_.wheelbase * std::cos(phi) -
+                       robot_params_.track * std::sin(phi)));
+    phi_i *= angle >= 0 ? 1.0 : -1.0;
+    return phi_i;
   }
 
   // Message creation functions

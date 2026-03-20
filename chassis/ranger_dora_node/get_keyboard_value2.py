@@ -154,7 +154,7 @@ try:
    
             timestamp = datetime.now().timestamp()# 获取当前时间
             #timestamp_ms = round(datetime.now().timestamp() * 1000)# 转换为毫秒格式
-            print(timestamp)
+            #print(timestamp)
       
             sentence_dict = {
                 "header": {

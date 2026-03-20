@@ -44,12 +44,13 @@ int main()
   try
   {
     // Initialize DORA context
+
     auto dora_context = init_dora_context_from_env();
-    if (dora_context == NULL)
-    {
-      std::cerr << "Failed to initialize DORA context" << std::endl;
-      return -1;
-    }
+    // if (dora_context == NULL)
+    // {
+    //   std::cerr << "Failed to initialize DORA context" << std::endl;
+    //   return -1;
+    // }
 
     std::cout << "DORA context initialized" << std::endl;
 
