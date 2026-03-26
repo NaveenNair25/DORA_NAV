@@ -31,7 +31,14 @@ LIDAR_TYPE: 激光雷达的类型 RSHELIOS_16P  # RSAIRY RSHELIOS RSHELIOS_16P
 ONLINE_LIDAR: 表示使用在线激光雷达函数离线激光雷达  0  # i: online   0: offine
 PCAP_PATH:  pcap文件存放的路径
 
+### 测试数据：
 
+- fast_stable_straight.pcap 是利用 RSHELIOS_16P 激光雷达录制的
+
+- lidar.pcap 、lidar2.pcap、lidar3.pcap 是利用 RSHELIOS 激光雷达录制的
+
+数据集可以从百度网盘下载 
+链接: https://pan.baidu.com/s/1i9qaw3oh3N0OUbmQJRP0cQ?pwd=f8mx 提取码: f8mx 
 
 ## 2. Mid360 Lidar driver 
 
